@@ -1,0 +1,23 @@
+{
+  "name": "pilottools",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run scripts/dev.ts",
+    "dev:expose": "bun run scripts/dev.ts --expose",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "leaflet": "latest",
+    "lucide-preact": "^1.43.0",
+    "preact": "latest"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "latest",
+    "@types/leaflet": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
