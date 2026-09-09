@@ -107,6 +107,21 @@ export function App() {
     }
   }
 
+  const savePresetsToStorage = (newPresets: Preset[]) => {
+    try {
+      localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(newPresets))
+    } catch (err) {
+      console.warn('Failed to save presets to storage', err)
+    }
+  }
+
+  const cloneMapState = (source: MapState): MapState => ({
+    center: [source.center[0], source.center[1]],
+    zoom: source.zoom,
+    waypoints: source.waypoints.map((w) => ({ ...w })),
+    links: source.links.map((l) => ({ ...l })),
+  })
+
   const pushState = (newState: MapState) => {
     historyPastRef.current.push(mapStateRef.current)
     historyFutureRef.current = []
@@ -152,6 +167,28 @@ export function App() {
     )
     pushState({ ...mapState, waypoints: nextWps })
     setSelectedWaypointId(null)
+  }
+
+  const createLinkBetweenWaypoints = (srcId: string, targetId: string): boolean => {
+    if (srcId === targetId) return false
+    const existing = mapStateRef.current.links.some(
+      (l) =>
+        (l.fromId === srcId && l.toId === targetId) ||
+        (l.fromId === targetId && l.toId === srcId)
+    )
+    if (!existing) {
+      const newLink: WaypointLink = {
+        id: crypto.randomUUID(),
+        fromId: srcId,
+        toId: targetId,
+      }
+      pushState({
+        ...mapStateRef.current,
+        links: [...mapStateRef.current.links, newLink],
+      })
+      return true
+    }
+    return false
   }
 
   // Initialize Map
@@ -312,6 +349,22 @@ export function App() {
     }
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setContextMenu(null)
+        setLinkingSourceId(null)
+        if (tempLineRef.current) {
+          tempLineRef.current.remove()
+          tempLineRef.current = null
+        }
+        setSaveModalOpen(false)
+        setLoadPresetTarget(null)
+        setDeletePresetTarget(null)
+        setSelectedWaypointId(null)
+        setActiveLinkId(null)
+        return
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         return
@@ -341,6 +394,10 @@ export function App() {
     window.addEventListener('keydown', handleGlobalKeyDown)
 
     return () => {
+      if (deleteTimerRef.current) {
+        clearTimeout(deleteTimerRef.current)
+        deleteTimerRef.current = null
+      }
       if (moveRaf) cancelAnimationFrame(moveRaf)
       window.removeEventListener('mousedown', handleGlobalMouseDown, true)
       window.removeEventListener('click', handleGlobalClick)
@@ -464,21 +521,29 @@ export function App() {
       }
     }
 
+    const initialPinPt = map.latLngToContainerPoint(marker.getLatLng())
+    const initialPointerPt = map.mouseEventToContainerPoint(e)
+    const grabOffset = {
+      x: initialPointerPt.x - initialPinPt.x,
+      y: initialPointerPt.y - initialPinPt.y,
+    }
+
     document.body.classList.add('is-waypoint-dragging')
     editCardRef.current?.classList.add('dragging')
     map.dragging.disable()
 
     let moved = false
 
-    const onPointerMove = (moveEvt: MouseEvent) => {
+    const onPointerMove = (moveEvt: PointerEvent) => {
       moved = true
-      const newLatLng = map.mouseEventToLatLng(moveEvt)
+      const curPointerPt = map.mouseEventToContainerPoint(moveEvt)
+      const targetPinPt = L.point(curPointerPt.x - grabOffset.x, curPointerPt.y - grabOffset.y)
+      const newLatLng = map.containerPointToLatLng(targetPinPt)
       marker.setLatLng(newLatLng)
 
       if (editCardRef.current) {
-        const pt = map.latLngToContainerPoint(newLatLng)
-        editCardRef.current.style.left = `${pt.x}px`
-        editCardRef.current.style.top = `${pt.y + 24}px`
+        editCardRef.current.style.left = `${targetPinPt.x}px`
+        editCardRef.current.style.top = `${targetPinPt.y + 24}px`
       }
 
       updateCorridorsForWaypoint(wpId, newLatLng)
@@ -496,8 +561,6 @@ export function App() {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerUp)
-      window.removeEventListener('mousemove', onPointerMove)
-      window.removeEventListener('mouseup', onPointerUp)
 
       document.body.classList.remove('is-waypoint-dragging')
       editCardRef.current?.classList.remove('dragging')
@@ -518,8 +581,6 @@ export function App() {
     window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointercancel', onPointerUp)
-    window.addEventListener('mousemove', onPointerMove)
-    window.addEventListener('mouseup', onPointerUp)
   }
 
   // Sync Waypoints and Links to Leaflet
@@ -788,24 +849,7 @@ export function App() {
         L.DomEvent.stopPropagation(e.originalEvent)
         if (linkingSourceIdRef.current) {
           if (linkingSourceIdRef.current !== wp.id) {
-            const srcId = linkingSourceIdRef.current
-            const targetId = wp.id
-            const existing = mapState.links.some(
-              (l) =>
-                (l.fromId === srcId && l.toId === targetId) ||
-                (l.fromId === targetId && l.toId === srcId)
-            )
-            if (!existing) {
-              const newLink: WaypointLink = {
-                id: crypto.randomUUID(),
-                fromId: srcId,
-                toId: targetId,
-              }
-              pushState({
-                ...mapState,
-                links: [...mapState.links, newLink],
-              })
-            }
+            createLinkBetweenWaypoints(linkingSourceIdRef.current, wp.id)
             setLinkingSourceId(null)
             startEditWaypoint(wp)
             return
@@ -860,7 +904,7 @@ export function App() {
         }
       }
     })
-  }, [mapState, selectedWaypointId, hoveredWaypointId, activeLinkId, linkingSourceId])
+  }, [mapState, selectedWaypointId, activeLinkId, linkingSourceId])
 
   // Handle right-click linking mousemove
   useEffect(() => {
@@ -887,22 +931,7 @@ export function App() {
           const sourceWpId = linkingSourceIdRef.current
 
           if (targetWpId !== sourceWpId) {
-            const existing = mapState.links.some(
-              (l) =>
-                (l.fromId === sourceWpId && l.toId === targetWpId) ||
-                (l.fromId === targetWpId && l.toId === sourceWpId)
-            )
-            if (!existing) {
-              const newLink: WaypointLink = {
-                id: crypto.randomUUID(),
-                fromId: sourceWpId,
-                toId: targetWpId,
-              }
-              pushState({
-                ...mapState,
-                links: [...mapState.links, newLink],
-              })
-            }
+            createLinkBetweenWaypoints(sourceWpId, targetWpId)
           }
         }
 
@@ -965,20 +994,21 @@ export function App() {
       id: crypto.randomUUID(),
       name: newPresetName.trim(),
       createdAt: Date.now(),
-      state: { ...mapState },
+      state: cloneMapState(mapState),
     }
     const updated = [preset, ...presets]
     setPresets(updated)
-    localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(updated))
+    savePresetsToStorage(updated)
     setNewPresetName('')
     setSaveModalOpen(false)
   }
 
   const handleConfirmLoadPreset = () => {
     if (!loadPresetTarget) return
-    pushState(loadPresetTarget.state)
+    const cloned = cloneMapState(loadPresetTarget.state)
+    pushState(cloned)
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView(loadPresetTarget.state.center, loadPresetTarget.state.zoom)
+      mapInstanceRef.current.setView(cloned.center, cloned.zoom)
     }
     setLoadPresetTarget(null)
     setIsDrawerOpen(false)
@@ -988,7 +1018,7 @@ export function App() {
     if (!deletePresetTarget) return
     const updated = presets.filter((p) => p.id !== deletePresetTarget.id)
     setPresets(updated)
-    localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(updated))
+    savePresetsToStorage(updated)
     setDeletePresetTarget(null)
   }
 
@@ -1011,24 +1041,7 @@ export function App() {
 
   const handleFlyToWaypoint = (wp: Waypoint) => {
     if (linkingSourceIdRef.current && linkingSourceIdRef.current !== wp.id) {
-      const srcId = linkingSourceIdRef.current
-      const targetId = wp.id
-      const existing = mapState.links.some(
-        (l) =>
-          (l.fromId === srcId && l.toId === targetId) ||
-          (l.fromId === targetId && l.toId === srcId)
-      )
-      if (!existing) {
-        const newLink: WaypointLink = {
-          id: crypto.randomUUID(),
-          fromId: srcId,
-          toId: targetId,
-        }
-        pushState({
-          ...mapState,
-          links: [...mapState.links, newLink],
-        })
-      }
+      createLinkBetweenWaypoints(linkingSourceIdRef.current, wp.id)
       setLinkingSourceId(null)
     }
     if (mapInstanceRef.current) {
@@ -1081,7 +1094,7 @@ export function App() {
         onReorderWaypoints={(newWps) => pushState({ ...mapState, waypoints: newWps })}
         onReorderPresets={(newPresets) => {
           setPresets(newPresets)
-          localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(newPresets))
+          savePresetsToStorage(newPresets)
         }}
       />
 
@@ -1147,7 +1160,11 @@ export function App() {
             <div
               className="edit-card-header"
               onPointerDown={(e) => {
-                if (e.button === 0 && !(e.target as HTMLElement).closest('.close-edit-btn')) {
+                if (
+                  e.button === 0 &&
+                  !(e.target as HTMLElement).closest('.close-edit-btn') &&
+                  !window.matchMedia('(max-width: 48rem)').matches
+                ) {
                   startUnifiedDrag(activeWp.id, e)
                 }
               }}

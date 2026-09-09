@@ -13,7 +13,8 @@ export function calculateDistanceNM(lat1: number, lon1: number, lat2: number, lo
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  const clampedA = Math.max(0, Math.min(1, a))
+  const c = 2 * Math.atan2(Math.sqrt(clampedA), Math.sqrt(Math.max(0, 1 - clampedA)))
   const distance = EARTH_RADIUS_NM * c
   return Math.round(distance * 10) / 10
 }

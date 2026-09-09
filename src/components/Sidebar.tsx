@@ -208,10 +208,18 @@ export function Sidebar({
 
         setPresetDrag((curr) => {
           if (curr && curr.index !== curr.targetIndex) {
-            const updated = [...presets]
-            const [moved] = updated.splice(curr.index, 1)
-            updated.splice(curr.targetIndex, 0, moved)
-            onReorderPresets(updated)
+            const sourcePreset = filteredPresets[curr.index]
+            const targetPreset = filteredPresets[curr.targetIndex]
+            if (sourcePreset && targetPreset) {
+              const withoutSource = presets.filter((p) => p.id !== sourcePreset.id)
+              const targetMasterIdx = withoutSource.findIndex((p) => p.id === targetPreset.id)
+              if (targetMasterIdx !== -1) {
+                const insertIdx = curr.index < curr.targetIndex ? targetMasterIdx + 1 : targetMasterIdx
+                const updated = [...withoutSource]
+                updated.splice(insertIdx, 0, sourcePreset)
+                onReorderPresets(updated)
+              }
+            }
           }
           return null
         })
