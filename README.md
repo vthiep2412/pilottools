@@ -35,9 +35,10 @@ bun run build
 - **3D Hover Tooltips**: Hovering any waypoint pin displays an elevated 3D tooltip with its title and operational description.
 - **Click to Edit**: Clicking a waypoint locks open an inline editor for name and description with instant save.
 - **Direct Waypoint Dragging**: Selected waypoints can be dragged directly across the map canvas. Connected corridor lines, aeronautical heading badges, distance badges, and edit cards follow the cursor live at 60 FPS.
-- **Right-Click Drag Linking**: Right-click and drag between two waypoints to draw flight legs.
+- **Route Corridor Linking**: Connect waypoints via desktop right-click dragging or by tapping the "Link" button in any waypoint edit card and selecting the target waypoint or sidebar card.
 - **Aeronautical Leg Badges**: Each flight route displays outbound true course degrees near departure, reciprocal inbound degrees near arrival, and Great-Circle distance in Nautical Miles (NM) at the midpoint.
 - **Route Severing**: Clicking a route or its distance badge reveals a delete button to disconnect legs.
 - **Saved Presets**: Save, filter, reorder, load, or delete route corridors and map setups through confirmation modals.
 - **Sidebar Waypoint Management**: Reorder waypoints with drag handles on the first 20% of cards, fly to points by clicking card bodies, or delete waypoints using a 5-second confirmation countdown button.
+- **Mobile Drawer and Touch Controls**: On viewports 48rem and below, the sidebar becomes a collapsible slide-over drawer with dark blur backdrop and enlarged 2.5rem drag handles. A floating action button at the bottom-right allows one-tap waypoint creation at map center, and the inline edit card docks at the bottom-left.
 - **Cockpit Dark Theme**: Styled strictly with rem units and high-contrast neutral dark shades with zero gradients.

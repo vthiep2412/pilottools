@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import { Trash2, GripVertical, Plus, Search, Check } from 'lucide-preact'
+import { Trash2, GripVertical, Plus, Search, Check, X } from 'lucide-preact'
 import { Waypoint, Preset } from '../types'
 
 interface SidebarProps {
@@ -7,6 +7,8 @@ interface SidebarProps {
   waypoints: Waypoint[]
   selectedWaypointId: string | null
   confirmDeleteWpId: string | null
+  isOpen?: boolean
+  onClose?: () => void
   onOpenSaveModal: () => void
   onSelectLoadPreset: (preset: Preset) => void
   onSelectDeletePreset: (preset: Preset) => void
@@ -21,6 +23,8 @@ export function Sidebar({
   waypoints,
   selectedWaypointId,
   confirmDeleteWpId,
+  isOpen,
+  onClose,
   onOpenSaveModal,
   onSelectLoadPreset,
   onSelectDeletePreset,
@@ -220,18 +224,30 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'drawer-open' : ''}`}>
       {/* Top: Presets Section */}
       <section className="sidebar-section presets-section">
         <div className="section-header">
           <span className="section-title">Saved Presets</span>
-          <button
-            className="icon-btn add-preset-btn"
-            onClick={onOpenSaveModal}
-            title="Save current map preset"
-          >
-            <Plus size={16} />
-          </button>
+          <div className="section-header-actions">
+            <button
+              className="icon-btn add-preset-btn"
+              onClick={onOpenSaveModal}
+              title="Save current map preset"
+            >
+              <Plus size={16} />
+            </button>
+            {onClose && (
+              <button
+                className="icon-btn mobile-drawer-close-btn"
+                onClick={onClose}
+                title="Close drawer"
+                aria-label="Close drawer"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="search-bar">

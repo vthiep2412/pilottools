@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import L from 'leaflet'
-import { Plus, X, Check, Trash2 } from 'lucide-preact'
+import { Plus, X, Check, Trash2, Menu, Link2 } from 'lucide-preact'
 import { Waypoint, WaypointLink, MapState, Preset } from './types'
 import { Sidebar } from './components/Sidebar'
 import { SavePresetModal, LoadPresetModal, DeletePresetModal } from './components/Modals'
@@ -87,6 +87,9 @@ export function App() {
   linkingSourceIdRef.current = linkingSourceId
 
   const [activeLinkId, setActiveLinkId] = useState<string | null>(null)
+  const activeLinkIdRef = useRef<string | null>(null)
+  activeLinkIdRef.current = activeLinkId
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false)
 
   const [saveModalOpen, setSaveModalOpen] = useState<boolean>(false)
   const [newPresetName, setNewPresetName] = useState<string>('')
@@ -236,10 +239,15 @@ export function App() {
       setContextMenu(null)
     })
 
-    map.on('click', () => {
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const origTarget = e.originalEvent?.target as HTMLElement | undefined
+      if (origTarget && origTarget.closest('.mobile-toggle-btn, .mobile-fab-add, .sidebar')) {
+        return
+      }
       setContextMenu(null)
       setActiveLinkId(null)
       setSelectedWaypointId(null)
+      setIsDrawerOpen(false)
     })
 
     const handleGlobalMouseDown = (e: MouseEvent) => {
@@ -584,6 +592,10 @@ export function App() {
       const outboundDeg = calculateTrueCourse(fromWp.lat, fromWp.lng, toWp.lat, toWp.lng)
       const inboundDeg = calculateReciprocalCourse(toWp.lat, toWp.lng, fromWp.lat, fromWp.lng)
 
+      const isSelected = activeLinkId === link.id
+      const isAnyLinkSelected = Boolean(activeLinkId)
+      const isDimmed = isAnyLinkSelected && !isSelected
+
       // Outer border / casing line
       const casingLine = L.polyline(
         [
@@ -591,9 +603,9 @@ export function App() {
           [toWp.lat, toWp.lng],
         ],
         {
-          color: '#000000',
-          weight: 6,
-          opacity: 0.95,
+          color: isSelected ? '#78350f' : '#000000',
+          weight: isSelected ? 7 : 6,
+          opacity: isDimmed ? 0.15 : 0.95,
         }
       )
 
@@ -604,10 +616,10 @@ export function App() {
           [toWp.lat, toWp.lng],
         ],
         {
-          color: '#f5f5f5',
-          weight: 3,
-          opacity: 1,
-          dashArray: '14, 12',
+          color: isSelected ? '#facc15' : '#f5f5f5',
+          weight: isSelected ? 3.5 : 3,
+          opacity: isDimmed ? 0.15 : 1,
+          dashArray: isSelected ? '10, 8' : '14, 12',
         }
       )
 
@@ -637,11 +649,9 @@ export function App() {
       const outboundPos = interpolatePoint(fromWp.lat, fromWp.lng, toWp.lat, toWp.lng, outFrac)
       const inboundPos = interpolatePoint(fromWp.lat, fromWp.lng, toWp.lat, toWp.lng, inFrac)
 
-      const isSelected = activeLinkId === link.id
-
       // Outbound course badge (right by departure pin, staggered if close angle)
       const outboundIcon = L.divIcon({
-        className: `course-badge-container ${isSelected ? 'selected' : ''}`,
+        className: `course-badge-container ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''}`,
         html: `<div class="course-badge outbound">${formatHeading(outboundDeg)}</div>`,
         iconSize: [52, 26],
         iconAnchor: [26, 13],
@@ -650,7 +660,7 @@ export function App() {
 
       // Inbound reciprocal course badge (right by arrival pin, staggered if close angle)
       const inboundIcon = L.divIcon({
-        className: `course-badge-container ${isSelected ? 'selected' : ''}`,
+        className: `course-badge-container ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''}`,
         html: `<div class="course-badge inbound">${formatHeading(inboundDeg)}</div>`,
         iconSize: [52, 26],
         iconAnchor: [26, 13],
@@ -660,7 +670,7 @@ export function App() {
       // Center distance badge (compact and dynamically centered)
       const midPos = interpolatePoint(fromWp.lat, fromWp.lng, toWp.lat, toWp.lng, 0.5)
       const distIcon = L.divIcon({
-        className: `distance-badge-container ${isSelected ? 'selected' : ''}`,
+        className: `distance-badge-container ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''}`,
         html: `<div class="distance-badge ${isSelected ? 'selected' : ''}"><span class="distance-text">${dist} NM</span>${isSelected ? `<button class="delete-link-btn" title="Delete Link">✕</button>` : ''}</div>`,
         iconSize: [0, 0],
         iconAnchor: [0, 0],
@@ -687,6 +697,7 @@ export function App() {
 
       // Hover focus elevation across corridor line and badges
       const onHoverCorridor = () => {
+        if (activeLinkIdRef.current) return
         for (const item of routeLinesRef.current) {
           const isCurrent = item.linkId === link.id
           const outEl = item.outboundMarker.getElement()
@@ -711,6 +722,7 @@ export function App() {
       }
 
       const onLeaveCorridor = () => {
+        if (activeLinkIdRef.current) return
         for (const item of routeLinesRef.current) {
           const outEl = item.outboundMarker.getElement()
           const inEl = item.inboundMarker.getElement()
@@ -745,11 +757,21 @@ export function App() {
     // 2. Render Waypoint Markers
     mapState.waypoints.forEach((wp) => {
       const isSelected = selectedWaypointId === wp.id
+      const isLinkSource = linkingSourceId === wp.id
+      const isAlreadyLinked = Boolean(
+        linkingSourceId &&
+        mapState.links.some(
+          (l) =>
+            (l.fromId === linkingSourceId && l.toId === wp.id) ||
+            (l.fromId === wp.id && l.toId === linkingSourceId)
+        )
+      )
+      const isLinkCandidate = Boolean(linkingSourceId && linkingSourceId !== wp.id && !isAlreadyLinked)
 
       const icon = L.divIcon({
         className: 'waypoint-marker-container',
         html: `
-          <div class="waypoint-pin ${isSelected ? 'selected' : ''}" data-wpid="${wp.id}">
+          <div class="waypoint-pin ${isSelected ? 'selected' : ''} ${isLinkSource ? 'link-source' : ''} ${isLinkCandidate ? 'link-candidate' : ''}" data-wpid="${wp.id}">
             <div class="pin-dot"></div>
           </div>
         `,
@@ -764,11 +786,41 @@ export function App() {
 
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e.originalEvent)
+        if (linkingSourceIdRef.current) {
+          if (linkingSourceIdRef.current !== wp.id) {
+            const srcId = linkingSourceIdRef.current
+            const targetId = wp.id
+            const existing = mapState.links.some(
+              (l) =>
+                (l.fromId === srcId && l.toId === targetId) ||
+                (l.fromId === targetId && l.toId === srcId)
+            )
+            if (!existing) {
+              const newLink: WaypointLink = {
+                id: crypto.randomUUID(),
+                fromId: srcId,
+                toId: targetId,
+              }
+              pushState({
+                ...mapState,
+                links: [...mapState.links, newLink],
+              })
+            }
+            setLinkingSourceId(null)
+            startEditWaypoint(wp)
+            return
+          } else {
+            setLinkingSourceId(null)
+            return
+          }
+        }
         startEditWaypoint(wp)
       })
 
       marker.on('mouseover', () => {
-        setHoveredWaypointId(wp.id)
+        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+          setHoveredWaypointId(wp.id)
+        }
       })
 
       marker.on('mouseout', () => {
@@ -808,7 +860,7 @@ export function App() {
         }
       }
     })
-  }, [mapState, selectedWaypointId, hoveredWaypointId, activeLinkId])
+  }, [mapState, selectedWaypointId, hoveredWaypointId, activeLinkId, linkingSourceId])
 
   // Handle right-click linking mousemove
   useEffect(() => {
@@ -888,6 +940,25 @@ export function App() {
     startEditWaypoint(newWp)
   }
 
+  const handleCreateWaypointAtCenter = () => {
+    const map = mapInstanceRef.current
+    if (!map) return
+    const center = map.getCenter()
+    const newWp: Waypoint = {
+      id: crypto.randomUUID(),
+      name: `WP-${mapState.waypoints.length + 1}`,
+      description: 'Checkpoint',
+      lat: center.lat,
+      lng: center.lng,
+    }
+    pushState({
+      ...mapState,
+      waypoints: [...mapState.waypoints, newWp],
+    })
+    setContextMenu(null)
+    startEditWaypoint(newWp)
+  }
+
   const handleSavePreset = () => {
     if (!newPresetName.trim()) return
     const preset: Preset = {
@@ -910,6 +981,7 @@ export function App() {
       mapInstanceRef.current.setView(loadPresetTarget.state.center, loadPresetTarget.state.zoom)
     }
     setLoadPresetTarget(null)
+    setIsDrawerOpen(false)
   }
 
   const handleConfirmDeletePreset = () => {
@@ -938,12 +1010,34 @@ export function App() {
   }
 
   const handleFlyToWaypoint = (wp: Waypoint) => {
+    if (linkingSourceIdRef.current && linkingSourceIdRef.current !== wp.id) {
+      const srcId = linkingSourceIdRef.current
+      const targetId = wp.id
+      const existing = mapState.links.some(
+        (l) =>
+          (l.fromId === srcId && l.toId === targetId) ||
+          (l.fromId === targetId && l.toId === srcId)
+      )
+      if (!existing) {
+        const newLink: WaypointLink = {
+          id: crypto.randomUUID(),
+          fromId: srcId,
+          toId: targetId,
+        }
+        pushState({
+          ...mapState,
+          links: [...mapState.links, newLink],
+        })
+      }
+      setLinkingSourceId(null)
+    }
     if (mapInstanceRef.current) {
       mapInstanceRef.current.flyTo([wp.lat, wp.lng], Math.max(mapInstanceRef.current.getZoom(), 11), {
         duration: 0.8,
       })
     }
     startEditWaypoint(wp)
+    setIsDrawerOpen(false)
   }
 
   const activeWp = mapState.waypoints.find((w) => w.id === selectedWaypointId)
@@ -965,7 +1059,16 @@ export function App() {
 
   return (
     <div className="app-layout">
+      {isDrawerOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsDrawerOpen(false)}
+        />
+      )}
+
       <Sidebar
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
         presets={presets}
         waypoints={mapState.waypoints}
         selectedWaypointId={selectedWaypointId}
@@ -983,6 +1086,35 @@ export function App() {
       />
 
       <div className="map-view" ref={mapContainerRef}>
+        {/* Mobile Sidebar Toggle Button */}
+        <button
+          className="mobile-toggle-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsDrawerOpen((prev) => !prev)
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={isDrawerOpen ? 'Close sidebar drawer' : 'Open sidebar drawer'}
+          title={isDrawerOpen ? 'Close sidebar drawer' : 'Open sidebar drawer'}
+        >
+          {isDrawerOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+
+        {/* Mobile Floating Action Button to Add Waypoint at Center */}
+        <button
+          className="mobile-fab-add"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleCreateWaypointAtCenter()
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label="Add waypoint at center"
+          title="Add waypoint at center"
+        >
+          <Plus size={22} />
+        </button>
         {hoveredWp && hoveredWpPoint && !selectedWaypointId && (
           <div
             className="waypoint-3d-tooltip"
@@ -1041,24 +1173,43 @@ export function App() {
                 onInput={(e) => setEditForm({ ...editForm, description: (e.target as HTMLInputElement).value })}
               />
             </div>
+            {linkingSourceId === activeWp.id && (
+              <div className="link-instruction-hint">Tap destination waypoint to create route</div>
+            )}
             <div className="edit-actions">
-              {confirmDeleteWpId === activeWp.id ? (
+              <div className="edit-actions-left">
+                {confirmDeleteWpId === activeWp.id ? (
+                  <button
+                    className="icon-btn tooltip-delete-btn confirm"
+                    onClick={() => handleDeleteWaypointClick(activeWp.id)}
+                    title="Sure?"
+                  >
+                    <Check size={16} />
+                  </button>
+                ) : (
+                  <button
+                    className="icon-btn tooltip-delete-btn"
+                    onClick={() => handleDeleteWaypointClick(activeWp.id)}
+                    title="Delete Waypoint"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
                 <button
-                  className="icon-btn tooltip-delete-btn confirm"
-                  onClick={() => handleDeleteWaypointClick(activeWp.id)}
-                  title="Sure?"
+                  className={`btn btn-link-route ${linkingSourceId === activeWp.id ? 'active' : ''}`}
+                  onClick={() => {
+                    if (linkingSourceId === activeWp.id) {
+                      setLinkingSourceId(null)
+                    } else {
+                      setLinkingSourceId(activeWp.id)
+                    }
+                  }}
+                  title={linkingSourceId === activeWp.id ? 'Cancel connecting' : 'Connect to another waypoint'}
                 >
-                  <Check size={16} />
+                  <Link2 size={14} />
+                  {linkingSourceId === activeWp.id ? 'Cancel' : 'Link'}
                 </button>
-              ) : (
-                <button
-                  className="icon-btn tooltip-delete-btn"
-                  onClick={() => handleDeleteWaypointClick(activeWp.id)}
-                  title="Delete Waypoint"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
+              </div>
               {isFormChanged && (
                 <button className="btn btn-save" onClick={saveEditWaypoint}>
                   <Check size={14} /> Save
