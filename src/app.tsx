@@ -107,6 +107,25 @@ export function App() {
     }
   }
 
+  const saveMapPositionToStorage = (center: [number, number], zoom: number) => {
+    try {
+      const raw = localStorage.getItem(STORAGE_MAP_KEY)
+      if (raw) {
+        const existing = JSON.parse(raw)
+        existing.center = center
+        existing.zoom = zoom
+        localStorage.setItem(STORAGE_MAP_KEY, JSON.stringify(existing))
+        return
+      }
+      localStorage.setItem(
+        STORAGE_MAP_KEY,
+        JSON.stringify({ center, zoom, waypoints: [], links: [] })
+      )
+    } catch {
+      // Ignore
+    }
+  }
+
   const savePresetsToStorage = (newPresets: Preset[]) => {
     try {
       localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(newPresets))
@@ -229,6 +248,12 @@ export function App() {
 
     mapInstanceRef.current = map
 
+    let isInitialMount = true
+    let mountTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      isInitialMount = false
+      mountTimer = null
+    }, 500)
+
     map.on('moveend zoomend', () => {
       const center = map.getCenter()
       const zoom = map.getZoom()
@@ -239,9 +264,11 @@ export function App() {
           zoom,
         }
         mapStateRef.current = next
-        saveStateToStorage(next)
         return next
       })
+      if (!isInitialMount) {
+        saveMapPositionToStorage([center.lat, center.lng], zoom)
+      }
     })
 
     // Real-time smooth tooltip repositioning while panning or zooming
@@ -394,6 +421,10 @@ export function App() {
     window.addEventListener('keydown', handleGlobalKeyDown)
 
     return () => {
+      if (mountTimer) {
+        clearTimeout(mountTimer)
+        mountTimer = null
+      }
       if (deleteTimerRef.current) {
         clearTimeout(deleteTimerRef.current)
         deleteTimerRef.current = null

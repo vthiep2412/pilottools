@@ -7,6 +7,7 @@
     "dev": "bun run scripts/dev.ts",
     "dev:expose": "bun run scripts/dev.ts --expose",
     "build": "tsc && vite build",
+    "build:singlefile": "bun run scripts/build-singlefile.ts",
     "preview": "vite preview"
   },
   "dependencies": {

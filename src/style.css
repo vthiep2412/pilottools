@@ -33,6 +33,7 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -45,7 +46,8 @@ body,
 .app-layout {
   display: flex;
   width: 100vw;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   overflow: hidden;
   overflow-x: hidden !important;
 }
@@ -896,8 +898,8 @@ body.is-waypoint-dragging * {
     align-items: center;
     justify-content: center;
     position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
+    top: calc(0.75rem + env(safe-area-inset-top, 0rem));
+    left: calc(0.75rem + env(safe-area-inset-left, 0rem));
     width: 2.375rem;
     height: 2.375rem;
     background-color: #141414;
@@ -923,9 +925,9 @@ body.is-waypoint-dragging * {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: absolute;
-    bottom: 1.25rem;
-    right: 1.25rem;
+    position: fixed;
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0rem));
+    right: calc(1.25rem + env(safe-area-inset-right, 0rem));
     width: 3.25rem;
     height: 3.25rem;
     border-radius: 50%;
@@ -949,12 +951,12 @@ body.is-waypoint-dragging * {
   /* Waypoint Edit Card docked at bottom left on mobile */
   .waypoint-edit-card {
     position: fixed !important;
-    left: 0.75rem !important;
-    bottom: 0.75rem !important;
+    left: calc(0.75rem + env(safe-area-inset-left, 0rem)) !important;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0rem)) !important;
     top: auto !important;
     right: auto !important;
     transform: none !important;
-    width: calc(100vw - 1.5rem) !important;
+    width: calc(100vw - 1.5rem - env(safe-area-inset-left, 0rem) - env(safe-area-inset-right, 0rem)) !important;
     max-width: 20rem !important;
     z-index: 1100;
     box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.9), 0 0 0.0625rem rgba(255, 255, 255, 0.2);
